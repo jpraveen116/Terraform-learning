@@ -1,0 +1,8 @@
+# .terraform
+.terraform/*
+
+# tf state files
+*.tfstate*
+
+# tf vars
+*.tfvars
