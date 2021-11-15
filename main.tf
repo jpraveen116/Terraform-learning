@@ -4,83 +4,49 @@ provider "aws" {
 }
 
 
-variable "subnet_cidr_block" {
-  description = "Subnet cidr block"
-}
-variable "vpc_cidr_block" {
-  description = "VPC cidr block"
-}
-
-variable "environment" {
-  description = "VPC cidr block"
-}
-
+variable "subnet_cidr_block" {}
+variable "vpc_cidr_block" {}
 variable "avail_zone" {}
 variable "env_prefix" {}
-variable "my-ip" {}
-
+variable "my_ip" {}
+variable "public_key" {}
 variable "instance_type" {}
-
-
-
-resource "aws_vpc" "development-vpc" {
+resource "aws_vpc" "myapp-vpc" {
 
   cidr_block = var.vpc_cidr_block
   tags = {
-    "Name" = "development",
+    "Name" = "${var.env_prefix}-vpc"
 
   }
 
 }
 
-resource "aws_subnet" "dev-subnet-1" {
-  vpc_id            = aws_vpc.development-vpc.id
+resource "aws_subnet" "myapp-subnet-1" {
+  vpc_id            = aws_vpc.myapp-vpc.id
   cidr_block        = var.subnet_cidr_block
-  availability_zone = "ap-south-1a"
+  availability_zone = var.avail_zone
   tags = {
-    "Name" = "subnet-1-dev"
+    "Name" = "${var.env_prefix}-subnet-1"
   }
-}
-
-
-
-
-/* 
-resource "aws_internet_gateway" "my-app-igw" {
-  vpc_id = aws_vpc.myapp-vpc.id
-  tags = {
-    "Name" = "${var.env_prefix}-igw"
-  }
-
 }
 
 resource "aws_default_route_table" "main-rtb" {
   default_route_table_id = aws_vpc.myapp-vpc.default_route_table_id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.my-app-igw.id
+    gateway_id = aws_internet_gateway.myapp-igw.id
+
   }
   tags = {
     "Name" = "${var.env_prefix}-main-rtb"
   }
+
 
 }
 
 resource "aws_default_security_group" "default-sg" {
 
   vpc_id = aws_vpc.myapp-vpc.id
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my-ip]
-  }
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   egress {
     from_port       = 0
@@ -89,44 +55,86 @@ resource "aws_default_security_group" "default-sg" {
     cidr_blocks     = ["0.0.0.0/0"]
     prefix_list_ids = []
   }
-
   tags = {
     "Name" = "${var.env_prefix}-default-sg"
+  }
+
+  ingress = [
+    {
+      cidr_blocks      = ["0.0.0.0/0"]
+      description      = ""
+      from_port        = 8080
+      ipv6_cidr_blocks = []
+      prefix_list_ids  = []
+      protocol         = "tcp"
+      security_groups  = []
+      self             = false
+      to_port          = 8080
+    },
+    {
+      cidr_blocks      = ["0.0.0.0/0"]
+      description      = ""
+      from_port        = 22
+      ipv6_cidr_blocks = []
+      prefix_list_ids  = []
+      protocol         = "tcp"
+      security_groups  = []
+      self             = true
+      to_port          = 22
+    },
+  ]
+
+}
+
+resource "aws_internet_gateway" "myapp-igw" {
+  vpc_id = aws_vpc.myapp-vpc.id
+  tags = {
+    "Name" = "${var.env_prefix}-igw"
   }
 
 }
 
 data "aws_ami" "latest-amazon-linux-image" {
-  most_recent = true
+  most_recent = "true"
   owners      = ["amazon"]
   filter {
     name   = "name"
-    values = ["amzn2*"]
+    values = ["amzn2-ami-hvm-*"]
   }
-
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
-
 }
 
-output "aws_ami" {
+output "aws_ami_id" {
   value = data.aws_ami.latest-amazon-linux-image.id
+}
+output "my_server_public_ip" {
+  value = aws_instance.myapp-server.public_ip
+}
+
+resource "aws_key_pair" "ssh-key" {
+  key_name   = "testing-key"
+  public_key = file("${var.public_key}")
 
 }
 
+resource "aws_instance" "myapp-server" {
+  ami                    = data.aws_ami.latest-amazon-linux-image.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.myapp-subnet-1.id
+  vpc_security_group_ids = [aws_default_security_group.default-sg.id]
+  availability_zone      = var.avail_zone
 
-resource "aws_instance" "my-app-server" {
-  ami           = data.aws_ami.latest-amazon-linux-image.id
-  instance_type = var.instance_type
-  subnet_id     = aws_subnet.my-app-subnet-1.id
-
-  availability_zone           = var.avail_zone
   associate_public_ip_address = true
-  key_name                    = "aws2"
+  key_name                    = aws_key_pair.ssh-key.key_name
+  user_data                   = file("./entry_script.sh")
 
   tags = {
     "Name" = "${var.env_prefix}-server"
   }
-} */
+
+}
+
+
