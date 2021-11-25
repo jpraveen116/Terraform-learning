@@ -3,6 +3,14 @@ provider "aws" {
 
 }
 
+terraform {
+  backend "s3" {
+    bucket = "myapp-bucket116"
+    region = "ap-south-1"
+    key    = "myapp/state.tfstate"
+  }
+}
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
